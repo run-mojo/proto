@@ -1,4 +1,4 @@
-package run.mojo.wire.builder;
+package run.mojo.builder;
 
 import com.squareup.wire.FieldEncoding;
 import com.squareup.wire.ProtoAdapter;

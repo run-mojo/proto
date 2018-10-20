@@ -1,8 +1,8 @@
-package run.mojo.wire.compiler
+package run.mojo.compiler
 
-import run.mojo.wire.Wire
-import run.mojo.wire.annotations.ImportModels
-import run.mojo.wire.annotations.ImportAction
+import run.mojo.Wire
+import run.mojo.annotations.ImportModels
+import run.mojo.annotations.ImportAction
 
 import javax.annotation.processing.ProcessingEnvironment
 import java.util.*

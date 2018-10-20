@@ -1,6 +1,7 @@
 package run.mojo.wire
 
 import io.grpc.MethodDescriptor
+import run.mojo.model.MessageDescriptor
 
 data class GrpcDescriptor<ReqT, RespT>(val method: MethodDescriptor<ReqT, RespT>)
 

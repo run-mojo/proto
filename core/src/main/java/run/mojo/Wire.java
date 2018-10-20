@@ -26,7 +26,9 @@
 // POSSIBILITY OF SUCH DAMAGE.
 // ================================================================================
 
-package run.mojo.wire;
+package run.mojo;
+
+import run.mojo.wire.Label;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

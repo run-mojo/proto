@@ -1,7 +1,5 @@
 package example
 
-import run.mojo.wire.Wire
-
 open class MySuperSuperSuper<C>(var list: List<C>? = null)
 
 /**

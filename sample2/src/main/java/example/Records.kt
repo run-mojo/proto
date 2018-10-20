@@ -2,7 +2,7 @@ package example
 
 import lombok.Data
 import lombok.Value
-import run.mojo.wire.Wire
+import run.mojo.Wire
 
 /**
  *

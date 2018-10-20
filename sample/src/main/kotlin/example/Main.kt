@@ -2,13 +2,11 @@
 
 package example
 
-import run.mojo.wire.compiler.ModelReflectionBuilder
+import run.mojo.compiler.ModelTransformer
 
 fun main(vararg args: String) {
 
-    val processor = ModelReflectionBuilder()
-
-
+    val processor = ModelTransformer()
 
     val model2 = processor.register(MyMessage::class.java)
 

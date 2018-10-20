@@ -1,9 +1,9 @@
 package example;
 
 import lombok.Data;
-import run.mojo.wire.Wire;
-import run.mojo.wire.compiler.WireAssembler;
-import run.mojo.wire.compiler.ModelReflectionBuilder;
+import run.mojo.Wire;
+import run.mojo.compiler.ModelTransformer;
+import run.mojo.compiler.Assembler;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
@@ -11,7 +11,7 @@ import java.lang.reflect.Parameter;
 import java.util.List;
 
 /** */
-//@Data
+// @Data
 @Data
 public class MyMessage extends MySuper<String, Long> {
   // public class MyMessage {
@@ -31,10 +31,8 @@ public class MyMessage extends MySuper<String, Long> {
     //            ctor ->
     //                Arrays.stream(ctor.getParameters()).forEach(p -> System.err.println(p)));
 
-    ModelReflectionBuilder processor = new ModelReflectionBuilder();
+    ModelTransformer processor = new ModelTransformer();
     processor.register(com.squareup.wire.schema.internal.parser.MessageElement.class);
-
-
 
     Method[] methods = Foo.class.getDeclaredMethods();
     Constructor[] ctors = Foo.class.getDeclaredConstructors();
@@ -53,7 +51,7 @@ public class MyMessage extends MySuper<String, Long> {
 
     Wire_MyMessage.builder().build();
 
-    WireAssembler schema = WireAssembler.Companion.create(processor);
+    Assembler schema = Assembler.Companion.create(processor);
 
     schema.build();
 

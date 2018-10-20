@@ -1,7 +1,7 @@
 package example;
 
 import com.google.auto.value.AutoValue;
-import run.mojo.wire.Wire;
+import run.mojo.Wire;
 
 /** */
 @AutoValue

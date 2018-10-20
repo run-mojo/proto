@@ -1,4 +1,4 @@
-package run.mojo.wire.compiler;
+package run.mojo.compiler;
 
 import com.google.common.base.Charsets;
 import com.squareup.wire.FieldEncoding;

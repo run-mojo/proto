@@ -2,7 +2,6 @@ package run.mojo.wire.type;
 
 import com.squareup.wire.schema.ProtoType;
 import run.mojo.wire.JavaKind;
-import run.mojo.wire.model.FieldModel;
 
 import java.lang.reflect.ParameterizedType;
 import java.util.ArrayList;

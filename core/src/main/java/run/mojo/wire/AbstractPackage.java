@@ -1,6 +1,7 @@
 package run.mojo.wire;
 
 import com.google.common.collect.ImmutableMap;
+import run.mojo.model.MessageDescriptor;
 
 /**
  *

@@ -6,7 +6,7 @@ plugins {
 }
 
 allprojects {
-    group = "io.movemedical.proto"
+    group = "run.mojo.proto"
     version = "1.0-SNAPSHOT"
 
     repositories {
@@ -14,7 +14,7 @@ allprojects {
             setUrl("https://repo.axismedtech.com/content/repositories/movemedical")
 
             credentials {
-                username = ""
+                username = "reader"
                 password = "u8xdAaT5keVnx88XMLBr"
             }
         }

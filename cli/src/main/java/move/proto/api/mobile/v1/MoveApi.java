@@ -1,7 +1,7 @@
 package move.proto.api.mobile.v1;
 
 import com.movemedical.server.app.action.admin.CreateDeliveryScheduleProfileApi;
-import run.mojo.wire.annotations.ImportAction;
+import run.mojo.annotations.ImportAction;
 
 /** */
 @ImportAction(

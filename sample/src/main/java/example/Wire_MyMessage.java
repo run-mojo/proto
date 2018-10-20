@@ -7,7 +7,7 @@ import com.squareup.wire.FieldEncoding;
 import com.squareup.wire.ProtoAdapter;
 import com.squareup.wire.ProtoReader;
 import com.squareup.wire.ProtoWriter;
-import run.mojo.wire.builder.MessageBuilder;
+import run.mojo.builder.MessageBuilder;
 
 import javax.annotation.Nullable;
 import java.io.IOException;

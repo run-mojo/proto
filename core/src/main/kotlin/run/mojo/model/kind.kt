@@ -1,4 +1,4 @@
-package run.mojo.wire
+package run.mojo.model
 
 /**
  * Protocol Buffers wire data type.

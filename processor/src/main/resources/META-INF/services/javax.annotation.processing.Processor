@@ -1,1 +1,1 @@
-run.mojo.wire.compiler.GeneratorProcessor
+run.mojo.compiler.GeneratorProcessor

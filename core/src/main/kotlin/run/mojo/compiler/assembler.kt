@@ -1,4 +1,4 @@
-package run.mojo.wire.compiler
+package run.mojo.compiler
 
 import com.squareup.javapoet.*
 import com.squareup.kotlinpoet.NameAllocator
@@ -6,36 +6,26 @@ import com.squareup.wire.FieldEncoding
 import com.squareup.wire.ProtoAdapter
 import com.squareup.wire.ProtoReader
 import com.squareup.wire.ProtoWriter
-import com.squareup.wire.schema.ProtoType
 import okio.ByteString
-import run.mojo.wire.compiler.WireAssembler.Pkg
-import run.mojo.wire.model.*
-
-import javax.lang.model.element.Modifier
+import run.mojo.model.*
 import java.io.IOException
 import java.util.*
-import java.util.function.BinaryOperator
-import java.util.function.Function
-import java.util.function.Supplier
 import java.util.stream.Collectors
-import java.util.stream.Stream
+import javax.annotation.processing.Filer
+import javax.lang.model.element.Modifier
 
 /** Assembles the completed Wire object model with all the supporting components.  */
-class WireAssembler(val nameAllocator: NameAllocator, val packageMap: TreeMap<String, Pkg>) {
-
-    internal fun protoFieldAdapterVar(name: String?): String {
-        var name = name
-        if (name == null) {
-            name = ""
-        }
-        return PROTO_ADAPTER_FIELD_VAR_PREFIX + name
-    }
+class Assembler(
+    val nameAllocator: NameAllocator,
+    val packageMap: TreeMap<String, Pkg>
+) {
+    var filer: Filer? = null
 
     fun build() {
         packageMap.values.forEach { pkg -> pkg.build() }
     }
 
-    internal fun toWireOuterName(prefix: String, enclosing: ClassName?, declared: DeclaredModel): ClassName {
+    private fun toWireOuterName(prefix: String, enclosing: ClassName?, declared: DeclaredModel): ClassName {
         return if (enclosing == null) {
             ClassName.get(declared.packageName, prefix + declared.relativeName)
         } else {
@@ -44,24 +34,27 @@ class WireAssembler(val nameAllocator: NameAllocator, val packageMap: TreeMap<St
     }
 
     /**  */
-    class Pkg(val spec: PackageModel) {
-        val nested: List<Declared<*>>
-
-        init {
-
-            this.nested = spec.nested.values
-                .map { NestedMapper(this, null, ClassName.bestGuess(spec.name)) }
-                .toList()
-        }
+    class Pkg(val model: PackageModel) {
+        val nested: List<Declared<*>> = model.nested.values
+            .map(NestedMapper(this, null, ClassName.bestGuess(model.name)))
+            .filterNotNull()
+            .toList()
 
         fun build() {
-            nested.forEach { n -> n.buildWire() }
+            nested.forEach {
+                it.buildWire()?.let {
+
+                }
+            }
         }
     }
 
     /**  */
     class Impl(
-        val impl: ImplModel, pkg: Pkg, enclosing: Enclosing<*>, model: MessageModel, wireOuter: ClassName
+        val impl: ImplModel,
+        pkg: Pkg,
+        enclosing: Enclosing<*>?,
+        wireOuter: ClassName
     ) : Message(pkg, enclosing, impl.message, wireOuter)
 
     abstract class Declared<T : DeclaredModel>(
@@ -70,14 +63,12 @@ class WireAssembler(val nameAllocator: NameAllocator, val packageMap: TreeMap<St
         val name: ClassName,
         val model: T,
         val wireOuter: ClassName,
-        nested: Stream<DeclaredModel>?
+        nested: List<DeclaredModel>
     ) {
-        val nested: List<Declared<*>> = if (nested == null)
-            emptyList()
-        else
-            nested
-                .map(NestedMapper(pkg, enclosing, wireOuter))
-                .collect(Collectors.toList()).map { it as Declared<*> }.toList()
+        val nested: List<Declared<*>> = nested
+            .map(NestedMapper(pkg, enclosing, wireOuter))
+            .filterNotNull()
+            .toList()
 
         open fun buildWire(): TypeSpec? {
             return null
@@ -85,27 +76,28 @@ class WireAssembler(val nameAllocator: NameAllocator, val packageMap: TreeMap<St
     }
 
     private class NestedMapper(
-        internal val pkg: Pkg,
-        internal val enclosing: Enclosing<*>?,
-        internal val wireOuter: ClassName
-    ) : Function<DeclaredModel, Declared<*>?> {
+        val pkg: Pkg,
+        val enclosing: Enclosing<*>?,
+        val wireOuter: ClassName?
+    ) : (DeclaredModel) -> Declared<*>? {
+        override fun invoke(n: DeclaredModel): Declared<*>? {
+            val wireClass = wireOuter?.nestedClass(n.simpleName) ?: toWireOuter(n)
 
-        override fun apply(n: DeclaredModel): Declared<*>? {
             return if (n is MessageModel) {
                 Message(
-                    pkg, enclosing, n, wireOuter.nestedClass(n.simpleName)
+                    pkg, enclosing, n, wireClass
                 )
             } else if (n is EnumModel) {
                 Enum(
-                    pkg, enclosing, n, wireOuter.nestedClass(n.simpleName)
+                    pkg, enclosing, n, wireClass
                 )
             } else if (n is EnclosingModel) {
                 Enclosing(
-                    pkg, enclosing, n, wireOuter.nestedClass(n.simpleName)
+                    pkg, enclosing, n, wireClass
                 )
             } else if (n is ImplModel) {
                 Impl(
-                    n, pkg, enclosing, n.message, wireOuter.nestedClass(n.name)
+                    n, pkg, enclosing, wireClass
                 )
             } else {
                 null
@@ -119,13 +111,15 @@ class WireAssembler(val nameAllocator: NameAllocator, val packageMap: TreeMap<St
         pkg: Pkg,
         enclosing: Enclosing<*>?,
         model: T,
-        wireOuter: ClassName) : Declared<T>(
+        wireOuter: ClassName
+    ) : Declared<T>(
         pkg,
         enclosing,
         ClassName.bestGuess(model.name),
         model,
         wireOuter,
-        model.nested.values.stream()) {
+        model.nested.values.toList()
+    ) {
 
         fun simpleName(): String {
             return model.simpleName
@@ -134,7 +128,8 @@ class WireAssembler(val nameAllocator: NameAllocator, val packageMap: TreeMap<St
         override fun buildWire(): TypeSpec? {
             val outer = TypeSpec.interfaceBuilder(wireOuter)
 
-            //      nested.stream().forEach(nested -> outer.addType(nested.buildWire()));
+            // Add nested.
+            nested.forEach { outer.addType(it.buildWire()) }
 
             return outer.build()
         }
@@ -144,35 +139,27 @@ class WireAssembler(val nameAllocator: NameAllocator, val packageMap: TreeMap<St
     open class Message(pkg: Pkg, enclosing: Enclosing<*>?, model: MessageModel, wireOuter: ClassName) :
         Enclosing<MessageModel>(pkg, enclosing, model, wireOuter) {
 
-        val protoAdapterName: ClassName
-        val jsonAdapterName: ClassName
-        val protoAdapterVar: ProtoAssignment
+        val protoAdapterName: ClassName = wireOuter.nestedClass(PROTO_ADAPTER_NAME)
+        val jsonAdapterName: ClassName = wireOuter.nestedClass(JSON_ADAPTER_NAME)
+        val protoAdapterVar: ProtoAssignment = toProtoAdapter(model)
         val fields: List<Field>
         var builder: MessageBuilder? = null
         internal var unknownField: Field? = null
 
         init {
-
-            this.protoAdapterName = wireOuter.nestedClass(PROTO_ADAPTER_NAME)
-            this.jsonAdapterName = wireOuter.nestedClass(JSON_ADAPTER_NAME)
-
-            // Wire_MyType.PROTO
-            this.protoAdapterVar = toProtoAdapter(model)
-
             // Create fields.
             fields = model
                 .fields
                 .values
-                .stream()
-                .map { f ->
+                .map {
                     Field(
-                        f,
-                        f.tag,
-                        f.name,
-                        toProtoAdapter(protoAdapterName, f.name, f.model)
+                        it,
+                        it.tag,
+                        it.name,
+                        toProtoAdapter(protoAdapterName, it.name, it.model)
                     )
                 }
-                .collect<List<Field>, Any>(Collectors.toList())
+                .toList()
         }
 
         fun buildBuilder(): TypeSpec? {
@@ -231,14 +218,14 @@ class WireAssembler(val nameAllocator: NameAllocator, val packageMap: TreeMap<St
                 for (field in fields) {
                     val nullable = !field.spec.model.javaKind.isPrimitive
                     if (nullable) {
-                        encodedSize.beginControlFlow("if (value.\$L != null)", field.getterExpression())
+                        encodedSize.beginControlFlow("if (value.\$L != null)", field.getAccessor())
                     }
                     encodedSize.addStatement(
                         "size += \$T.\$L.encodeSizeWithTag(writer, \$L, \$L)",
-                        field.proto.varClass,
-                        field.proto.varName,
+                        field.proto.location,
+                        field.proto.field,
                         field.tag,
-                        field.getterExpression()
+                        field.getAccessor()
                     )
                     if (nullable) {
                         encodedSize.endControlFlow()
@@ -265,14 +252,14 @@ class WireAssembler(val nameAllocator: NameAllocator, val packageMap: TreeMap<St
 
                     if (nullable) {
                         // Wrap in a "!= null" statement.
-                        encode.beginControlFlow("if (value.\$L != null)", field.getterExpression())
+                        encode.beginControlFlow("if (value.\$L != null)", field.getAccessor())
                     }
                     encode.addStatement(
                         "\$T.\$L.encodeWithTag(writer, \$L, \$L)",
-                        field.proto.varClass,
-                        field.proto.varName,
+                        field.proto.location,
+                        field.proto.field,
                         field.tag,
-                        field.getterExpression()
+                        field.getAccessor()
                     )
                     if (nullable) {
                         encode.endControlFlow()
@@ -314,10 +301,10 @@ class WireAssembler(val nameAllocator: NameAllocator, val packageMap: TreeMap<St
 
                     decode.addStatement(
                         "\$T.\$L.encodeWithTag(writer, \$L, \$L)",
-                        field.proto.varClass,
-                        field.proto.varName,
+                        field.proto.location,
+                        field.proto.field,
                         field.tag,
-                        field.getterExpression()
+                        field.getAccessor()
                     )
 
                     decode.endControlFlow("break")
@@ -356,19 +343,30 @@ class WireAssembler(val nameAllocator: NameAllocator, val packageMap: TreeMap<St
     class MessageBuilder(val message: Message, val name: ClassName)
 
     /**  */
-    class Field(
+    class Field internal constructor(
         val spec: FieldModel, val tag: Int, val name: String, // ProtoAdapter static expression.
         val proto: ProtoAssignment
     ) {
 
-        fun getterExpression(): String {
+        fun getAccessor(): String {
             return ""
         }
     }
 
     /**  */
-    class Enum(pkg: Pkg, enclosing: Enclosing<*>, model: EnumModel, wireOuter: ClassName) :
-        Declared<EnumModel>(pkg, enclosing, ClassName.bestGuess(model.name), model, wireOuter, Stream.empty()) {
+    class Enum(
+        pkg: Pkg,
+        enclosing: Enclosing<*>?,
+        model: EnumModel,
+        wireOuter: ClassName
+    ) : Declared<EnumModel>(
+        pkg,
+        enclosing,
+        ClassName.bestGuess(model.name),
+        model,
+        wireOuter,
+        emptyList()
+    ) {
 
         // {package}.Proto_
         val protoAdapterName: ClassName
@@ -400,7 +398,7 @@ class WireAssembler(val nameAllocator: NameAllocator, val packageMap: TreeMap<St
         val PROTO_ADAPTER_FIELD_VAR_PREFIX = "__"
 
         val ADAPTER_VAR_NAME = "ADAPTER"
-        internal val PROTO_ADAPTER = ClassName.get(ProtoAdapter<*>::class.java)
+        internal val PROTO_ADAPTER = ClassName.get(ProtoAdapter::class.java)
         internal val FIELD_ENCODING = ClassName.get(FieldEncoding::class.java)
         internal val PROTO_WRITER = ClassName.get(ProtoWriter::class.java)
         internal val PROTO_READER = ClassName.get(ProtoReader::class.java)
@@ -423,23 +421,23 @@ class WireAssembler(val nameAllocator: NameAllocator, val packageMap: TreeMap<St
         internal val STRING = toBuiltinProtoAdapter(String::class.java, "STRING")
         internal val BYTES = toBuiltinProtoAdapter(ByteString::class.java, "BYTES")
 
-        fun create(processor: ModelBuilder): WireAssembler {
+        fun create(processor: ModelTransformer): Assembler {
             return create(processor.packages.values)
         }
 
-        fun create(packages: Collection<PackageModel>): WireAssembler {
+        fun create(packages: Collection<PackageModel>): Assembler {
 
-            val pkgs = packages.stream().map { Pkg(it) }.collect<List<Pkg>, Any>(Collectors.toList())
+            val pkgs = packages.map { Pkg(it) }.toList()
             val nameAllocator = NameAllocator()
 
             // Resolve.
 
-            return WireAssembler(
+            return Assembler(
                 nameAllocator,
                 pkgs.stream()
                     .collect(
                         Collectors.toMap(
-                            { k -> k.spec.name },
+                            { k -> k.model.name },
                             { it },
                             { p1, p2 -> p2 },
                             { TreeMap<String, Pkg>() })
@@ -514,8 +512,8 @@ class WireAssembler(val nameAllocator: NameAllocator, val packageMap: TreeMap<St
                     ParameterizedTypeName.get(
                         ClassName.get(ProtoAdapter::class.java), listSpec.component.toTypeName(true)
                     ),
-                    protoAdapterName,
-                    fieldName,
+                    protoAdapterName!!,
+                    fieldName!!,
                     component,
                     spec.isPacked
                 )
@@ -534,8 +532,8 @@ class WireAssembler(val nameAllocator: NameAllocator, val packageMap: TreeMap<St
                         ClassName.get(ProtoAdapter::class.java),
                         ParameterizedTypeName.get(ClassName.get(Map::class.java), keyName, valueName)
                     ),
-                    protoAdapterName,
-                    fieldName,
+                    protoAdapterName!!,
+                    fieldName!!,
                     key,
                     value
                 )
@@ -558,47 +556,98 @@ class WireAssembler(val nameAllocator: NameAllocator, val packageMap: TreeMap<St
     }
 }
 
-
-internal enum class NamingStrategy {
-    PREFIX,
-    SUFFIX,
-    PREFIX_AND_SUFFIX
+/**
+ *
+ */
+interface FormatGenerator<A : FormatMessageAdapter> {
+    fun ofMessage(message: MessageModel): A
+    fun ofImpl(message: ImplModel): A
+    fun ofEnum(message: EnumModel): A
 }
-
-enum class Mutability {
-    /** The message is also the builder. Mutable.  */
-    MUTABLE,
-
-    /** No builder is used and the message is immutable.  */
-    IMMUTABLE,
-
-    /**
-     * A separate object is used for building a message. The final message is usually immutable but
-     * this pattern may apply to mutable messages.
-     */
-    BUILDER
-}
-
-class StaticVar(val signature: TypeName, val location: ClassName, val name: String)
 
 /**
  *
  */
-internal open class ProtoAssignment(
-    val signature: ParameterizedTypeName,
-    val varClass: ClassName,
-    val varName: String
-) {
+interface FormatMessageAdapter {
+    val fields: List<FormatField>
 
-    open fun cache(): Boolean {
-        return false
+    fun assign(field: FieldModel)
+}
+
+/**
+ *
+ */
+data class FormatField(
+    val field: FieldModel,
+    val assignment: AdapterAssignment
+)
+
+/**
+ *
+ */
+class FormatNaming(
+    val staticName: String,
+    val suffix: String,
+    val id: String,
+    val adapterName: ClassName
+)
+
+/**
+ *
+ */
+interface AdapterAssignment {
+    val signature: TypeName
+
+    val location: ClassName
+
+    val field: String
+
+    val cache: Boolean
+
+    fun initializer(): CodeBlock
+
+    fun build(): FieldSpec?
+}
+
+class ProtoEnumAdapter
+
+
+class ProtoMessageAdapter(fields: List<FormatField>) : FormatMessageAdapter {
+    override val fields: List<FormatField>
+        get() = TODO("not implemented") //To change initializer of created properties use File | Settings | File Templates.
+
+    override fun assign(field: FieldModel) {
+
     }
 
-    open fun initializer(): CodeBlock {
-        return CodeBlock.of("\$T.\$L", varClass, varName)
+    companion object {
+        fun of(fields: List<FieldModel>) {
+
+        }
+    }
+}
+
+class ProtoMessage(val message: Assembler.Message)
+
+class ProtoEnum(val message: Assembler.Message)
+
+/**
+ *
+ */
+open class ProtoAssignment(
+    override val signature: ParameterizedTypeName,
+    override val location: ClassName,
+    override val field: String
+) : AdapterAssignment {
+
+    override val cache: Boolean
+        get() = false
+
+    override fun initializer(): CodeBlock {
+        return CodeBlock.of("\$T.\$L", location, field)
     }
 
-    open fun build(): FieldSpec? {
+    override fun build(): FieldSpec? {
         return null
     }
 }
@@ -614,9 +663,8 @@ internal class ProtoListAssignment(
     val packed: Boolean
 ) : ProtoAssignment(signature, varClass, varName) {
 
-    override fun cache(): Boolean {
-        return true
-    }
+    override val cache: Boolean
+        get() = true
 
     override fun initializer(): CodeBlock {
         return CodeBlock.builder()
@@ -626,7 +674,7 @@ internal class ProtoListAssignment(
     }
 
     override fun build(): FieldSpec? {
-        return FieldSpec.builder(signature, varName, Modifier.PUBLIC, Modifier.STATIC, Modifier.FINAL)
+        return FieldSpec.builder(signature, field, Modifier.PUBLIC, Modifier.STATIC, Modifier.FINAL)
             .initializer(initializer())
             .build()
     }
@@ -643,9 +691,8 @@ internal class ProtoMapAssignment(
     val value: ProtoAssignment
 ) : ProtoAssignment(signature, varClass, varName) {
 
-    override fun cache(): Boolean {
-        return true
-    }
+    override val cache: Boolean
+        get() = true
 
     override fun initializer(): CodeBlock {
         return CodeBlock.builder()
@@ -658,14 +705,14 @@ internal class ProtoMapAssignment(
     }
 
     override fun build(): FieldSpec? {
-        return FieldSpec.builder(signature, varName, Modifier.PUBLIC, Modifier.STATIC, Modifier.FINAL)
+        return FieldSpec.builder(signature, field, Modifier.PUBLIC, Modifier.STATIC, Modifier.FINAL)
             .initializer(
                 "\$T.newMapAdapter(\$T.\$L, \$T.\$L)",
-                ClassName.get(ProtoAdapter<*>::class.java),
-                key.varClass,
-                key.varName,
-                value.varClass,
-                value.varName
+                ClassName.get(ProtoAdapter::class.java),
+                key.location,
+                key.field,
+                value.location,
+                value.field
             )
             .build()
     }

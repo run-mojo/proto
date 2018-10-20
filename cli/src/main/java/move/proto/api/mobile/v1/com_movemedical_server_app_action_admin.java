@@ -2,9 +2,9 @@ package move.proto.api.mobile.v1;
 
 import com.movemedical.server.app.action.admin.CreateDeliveryScheduleProfileApi;
 import io.grpc.MethodDescriptor;
-import run.mojo.wire.annotations.ModuleName;
-import run.mojo.wire.annotations.ImportAction;
-import run.mojo.wire.annotations.ImportPackage;
+import run.mojo.annotations.ModuleName;
+import run.mojo.annotations.ImportAction;
+import run.mojo.annotations.ImportPackage;
 
 /** */
 @ImportPackage(

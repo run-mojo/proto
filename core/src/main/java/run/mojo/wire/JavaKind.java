@@ -50,6 +50,9 @@ public enum JavaKind {
   TEMPLATE,
   ENCLOSING,
 
+  VOID,
+  INVALID,
+
   EXTENDED,
   ;
 

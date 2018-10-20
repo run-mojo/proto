@@ -1,6 +1,6 @@
 package example
 
-import run.mojo.wire.Wire
+import run.mojo.Wire
 import java.util.*
 
 /**

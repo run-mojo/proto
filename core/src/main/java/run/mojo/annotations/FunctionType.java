@@ -1,4 +1,4 @@
-package run.mojo.wire.annotations;
+package run.mojo.annotations;
 
 public @interface FunctionType {
 

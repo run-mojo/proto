@@ -1,4 +1,4 @@
-package run.mojo.wire.annotations;
+package run.mojo.annotations;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -8,5 +8,6 @@ import java.lang.annotation.Target;
 /** */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
-public @interface Edge {
+public @interface ImportModels {
+  Class[] value() default {};
 }

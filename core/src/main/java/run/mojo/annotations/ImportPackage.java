@@ -1,4 +1,4 @@
-package run.mojo.wire.annotations;
+package run.mojo.annotations;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
